@@ -7,7 +7,6 @@ Created on Fri Jan  7 15:00:37 2022
 
 import glob
 import os 
-import pandas as pd
 import torch 
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
@@ -19,8 +18,8 @@ class SegNetDataSet(Dataset):
     def __init__(self, directory, transforms):
         super(SegNetDataSet, self).__init__()
         
-        self.data = glob.glob(os.path.join(directory,'images','*.png'))
-        self.targets = glob.glob(os.path.join(directory,'masks','*.png'))
+        self.data = glob.glob(os.path.join(directory,'greyscale_images','*.png'))
+        self.targets = glob.glob(os.path.join(directory,'flattened_masks','*.png'))
         self.transforms = transforms
         # transforms.Normalize(mean = [(0.1564,0.1926,0.2511)], std=[(0.2174,0.2430,0.2511)]), 
         
@@ -34,6 +33,7 @@ class SegNetDataSet(Dataset):
                 data = self.transforms(data)
                 target = self.transforms(target)
                 
+            
             return data, target
 
     def __len__(self):
