@@ -20,10 +20,11 @@ from torch.utils.data import DataLoader  # Gives easier dataset managment by cre
 from tqdm import tqdm  # For nice progress bar!
 from SegNetDataSet import SegNetDataSet
 
-# Simple CNN
+# ============================================================================= # 
+#  SegNet
 class SegNet(nn.Module):
     
-    def __init__(self, in_channels=1):
+    def __init__(self, in_channels, num_classes):
         super(SegNet, self).__init__()
         
         # -------------------------# 
@@ -35,7 +36,6 @@ class SegNet(nn.Module):
         
         self.encoder_mp1 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2), return_indices=True)
         
-        # INDEX 8 , 64
         # -------------------------# 
         # Encoder block 2
         self.encoder_conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
@@ -45,7 +45,6 @@ class SegNet(nn.Module):
         
         self.encoder_mp2 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2), return_indices=True)
         
-        # INDEX 4 , 128
         # -------------------------# 
         # Encoder block 3
         self.encoder_conv5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
@@ -55,7 +54,6 @@ class SegNet(nn.Module):
         
         self.encoder_mp3 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2), return_indices=True)
         
-        # INDEX 2 , 256
         # ============================ # 
         # Decoder block 1
         self.decoder_mup1 = nn.MaxUnpool2d(kernel_size=(2, 2), stride=(2, 2))
@@ -65,7 +63,6 @@ class SegNet(nn.Module):
         self.decoder_conv2 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         self.decoder_bn2 = nn.BatchNorm2d(128)
         
-        # NEEDS 2, 256
         # -------------------------# 
         # Decoder block 2
         self.decoder_mup2 = nn.MaxUnpool2d(kernel_size=(2, 2), stride=(2, 2))
@@ -75,17 +72,15 @@ class SegNet(nn.Module):
         self.decoder_conv4 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         self.decoder_bn4 = nn.BatchNorm2d(64)
         
-        # NEEDS 4, 128
         # -------------------------# 
         # Decoder block 3
         self.decoder_mup3 = nn.MaxUnpool2d(kernel_size=(2, 2), stride=(2, 2))
         
-        self.decoder_conv5 = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.decoder_bn5 = nn.BatchNorm2d(1)
-        self.decoder_conv6 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.decoder_bn6 = nn.BatchNorm2d(1)
+        self.decoder_conv5 = nn.Conv2d(in_channels=64, out_channels=num_classes, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        self.decoder_bn5 = nn.BatchNorm2d(num_classes)
+        self.decoder_conv6 = nn.Conv2d(in_channels=num_classes, out_channels=num_classes, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        self.decoder_bn6 = nn.BatchNorm2d(num_classes)
         
-        # NEEDS 8, 64
         # -------------------------# 
         # Prediction layer
         
@@ -125,27 +120,60 @@ class SegNet(nn.Module):
         
         return x
 
+# ============================================================================= # 
+# # Check accuracy on training & test to see how good our model
+def check_accuracy(loader, model):
+    
+    model.eval()
+
+    with torch.no_grad():
+        for data, target in loader:
+            data = data.to(device=device)
+            # target = target.to(device=device)
+
+            scores = model(data)
+            
+            for i in range(scores.shape[0]):
+                score = scores[i, :, :, :]
+                
+                score = torch.argmax(score.squeeze(), dim=0).cpu().detach().numpy()
+                true_label = target[i, :, :].numpy()
+                
+            
+    # model.train()
+    return 
+
+# ============================================================================= # 
+
 torch.cuda.empty_cache()
 
 # Compose transformations 
-my_transforms = transforms.Compose([
+data_transforms = transforms.Compose([
     transforms.Resize((256,256)),   
-    transforms.ToTensor(),          
+    transforms.ToTensor(),  
+    transforms.Normalize( mean = [0.1600, 0.1959, 0.2559], 
+                          std=[0.2209, 0.2456, 0.2530] )
+    ])   
+
+target_transforms = transforms.Compose([
+    transforms.Resize((256,256)),   
     ])   
 
 # Hyperparameters
-in_channels = 1
-learning_rate = 0.001
-batch_size = 2
-num_epochs = 2
+in_channels = 3
+learning_rate = 0.01
+batch_size = 16
+num_epochs = 3
+num_classes = 3
 
 # Load custom dataset
-dataset = SegNetDataSet('/Users/srujanvajram/Documents/Github/ML_playground/ML_playground/PyTorch/segnet/archive', transforms = my_transforms)
+dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\segnet\archive', 
+                        data_transforms=data_transforms, target_transforms=target_transforms)
 
 # Produce test and train sets
 train_set, test_set = torch.utils.data.random_split(dataset, [329, 37]) # 90% 10% split between train and test 
 
-# Compute mean and std of test data
+# # Compute mean and std of test data
 # train_loader = DataLoader(dataset=train_set, batch_size=len(train_set))
 # data, targets = next(iter(train_loader))
 # means = data[:, 0, :, :].mean(), data[:, 1, :, :].mean(), data[:, 2, :, :].mean()
@@ -158,7 +186,7 @@ test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Initialize network
-model = SegNet(in_channels=in_channels).to(device)
+model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
 
 # Loss and optimizer
 criterion = nn.CrossEntropyLoss()
@@ -173,7 +201,6 @@ for epoch in range(num_epochs):
         # Get data to cuda if possible
         data = data.to(device=device)
         targets = targets.to(device=device)
-        
 
         # forward
         scores = model(data)
@@ -187,27 +214,7 @@ for epoch in range(num_epochs):
 
         # gradient descent or adam step
         optimizer.step()
+            
+# ============================================================================= # 
 
-# # Check accuracy on training & test to see how good our model
-# def check_accuracy(loader, model):
-#     num_correct = 0
-#     num_samples = 0
-#     model.eval()
-
-#     with torch.no_grad():
-#         for x, y in loader:
-#             x = x.to(device=device)
-#             y = y.to(device=device)
-
-#             scores = model(x)
-#             _, predictions = scores.max(1)
-#             num_correct += (predictions == y).sum()
-#             num_samples += predictions.size(0)
-
-
-#     model.train()
-#     return num_correct/num_samples
-
-
-# print(f"Accuracy on training set: {check_accuracy(train_loader, model)*100:.2f}")
-# print(f"Accuracy on test set: {check_accuracy(test_loader, model)*100:.2f}")
+check_accuracy(train_loader, model)
