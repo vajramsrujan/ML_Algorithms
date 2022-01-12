@@ -125,12 +125,13 @@ class SegNet(nn.Module):
 def check_accuracy(loader, model):
     
     model.eval()
-
+    image_accuracies = []
+    
     with torch.no_grad():
-        for data, target in loader:
+        for index, (data, target) in enumerate(loader):
+            print("checking batch " + str(index))
             data = data.to(device=device)
-            # target = target.to(device=device)
-
+    
             scores = model(data)
             
             for i in range(scores.shape[0]):
@@ -138,10 +139,14 @@ def check_accuracy(loader, model):
                 
                 score = torch.argmax(score.squeeze(), dim=0).cpu().detach().numpy()
                 true_label = target[i, :, :].numpy()
+                matching = score == true_label
+                
+                accuracy = matching.sum() / len(matching.flatten())
+                image_accuracies.append(accuracy*100)
                 
             
-    # model.train()
-    return 
+    model.train()
+    return np.array(image_accuracies)
 
 # ============================================================================= # 
 
@@ -163,7 +168,7 @@ target_transforms = transforms.Compose([
 in_channels = 3
 learning_rate = 0.01
 batch_size = 16
-num_epochs = 3
+num_epochs = 10
 num_classes = 3
 
 # Load custom dataset
@@ -217,4 +222,8 @@ for epoch in range(num_epochs):
             
 # ============================================================================= # 
 
-check_accuracy(train_loader, model)
+training_accuracies = check_accuracy(train_loader, model)
+testing_accuracies = check_accuracy(test_loader, model)
+
+print(f"Accuracy on training set " + str(training_accuracies.mean()))
+print(f"Accuracy on test set " + str(testing_accuracies.mean()))
