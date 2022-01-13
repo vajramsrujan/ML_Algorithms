@@ -19,6 +19,8 @@ from torch import nn  # All neural network modules
 from torch.utils.data import DataLoader  # Gives easier dataset managment by creating mini batches etc.
 from tqdm import tqdm  # For nice progress bar!
 from SegNetDataSet import SegNetDataSet
+from PIL import Image
+from matplotlib import pyplot as plt
 
 # ============================================================================= # 
 #  SegNet
@@ -119,13 +121,35 @@ class SegNet(nn.Module):
         # x = torch.squeeze(x)
         
         return x
+# ============================================================================= # 
 
+def load_model(filename): 
+    
+    model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    checkpoint = torch.load(filename)
+    model.load_state_dict(checkpoint['model_state'])
+    optimizer.load_state_dict(checkpoint['optim_state'])
+    
+    return model, optimizer
+# ============================================================================= # 
+
+def save_model_at_checkpoint(state, epoch):
+    filename = "model_at_epoch_" + str(epoch) + ".pth.tar"
+    torch.save(state, filename)
+    
 # ============================================================================= # 
 # # Check accuracy on training & test to see how good our model
-def check_accuracy(loader, model):
+def check_accuracy(loader, model, num_classes):
     
     model.eval()
-    image_accuracies = []
+    class_accuracies = []
+    for i in range(num_classes):
+        # In each iteration, add an empty list to the main list
+        class_accuracies.append([])
+    
+    predictions = []
     
     with torch.no_grad():
         for index, (data, target) in enumerate(loader):
@@ -137,16 +161,40 @@ def check_accuracy(loader, model):
             for i in range(scores.shape[0]):
                 score = scores[i, :, :, :]
                 
-                score = torch.argmax(score.squeeze(), dim=0).cpu().detach().numpy()
+                prediction = torch.argmax(score.squeeze(), dim=0).cpu().detach().numpy()
                 true_label = target[i, :, :].numpy()
-                matching = score == true_label
                 
-                accuracy = matching.sum() / len(matching.flatten())
-                image_accuracies.append(accuracy*100)
+                predictions.append((prediction, true_label))
                 
-            
+                for n in range(num_classes):
+                # matching = prediction == true_label
+                    
+                    prediction_class_pos = prediction == n
+                    true_label_class_pos = true_label == n
+                    matching = prediction_class_pos & true_label_class_pos
+                    unmatching = prediction_class_pos ^ true_label_class_pos # xor
+                    
+                    if true_label_class_pos.sum() != 0:
+                        accuracy = (matching.sum() / true_label_class_pos.sum()) - (unmatching.sum() / len(unmatching.flatten()))
+                    else:
+                        accuracy = 1 - ( (unmatching.sum() / len(unmatching.flatten())) )
+                    
+                    class_accuracies[n].append(accuracy*100)
+          
+    
     model.train()
-    return np.array(image_accuracies)
+    return np.array(class_accuracies), predictions
+
+# ============================================================================= # 
+
+def show_overlay(prediction_list, index): 
+
+    plt.figure()
+    plt.imshow(prediction_list[index][0])
+    plt.figure()
+    plt.imshow(prediction_list[index][1])
+        
+    return
 
 # ============================================================================= # 
 
@@ -168,8 +216,10 @@ target_transforms = transforms.Compose([
 in_channels = 3
 learning_rate = 0.01
 batch_size = 16
-num_epochs = 10
+num_epochs = 20
 num_classes = 3
+LOAD_MODEL = False
+
 
 # Load custom dataset
 dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\segnet\archive', 
@@ -184,46 +234,63 @@ train_set, test_set = torch.utils.data.random_split(dataset, [329, 37]) # 90% 10
 # means = data[:, 0, :, :].mean(), data[:, 1, :, :].mean(), data[:, 2, :, :].mean()
 # stds = data[:, 0, :, :].std(), data[:, 1, :, :].std(), data[:, 2, :, :].std()
 
-train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=False)
+test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Initialize network
-model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
-
-# Loss and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-# Train Network
-losses = np.zeros((1,num_epochs)).flatten()
-
-for epoch in range(num_epochs):
-    for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
-        
-        # Get data to cuda if possible
-        data = data.to(device=device)
-        targets = targets.to(device=device)
-
-        # forward
-        scores = model(data)
-        
-        loss = criterion(scores, targets)
-        losses[epoch] = loss.item()
-        
-        # backward
-        optimizer.zero_grad()
-        loss.backward()
-
-        # gradient descent or adam step
-        optimizer.step()
+    
+if not LOAD_MODEL: 
+    # Initialize network
+    # model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
+    model, optimizer = load_model("model_at_epoch_" + str(num_epochs-1) + ".pth.tar")
+    
+    # Compute the weighting for each class used in the loss
+    normedWeights = [0.1664200524791033, 0.8427401371639913, 0.9908398103569054]
+    normedWeights = torch.FloatTensor(normedWeights).to(device)
+    # class_weights = [0.0102774, 0.0544769, 0.935246]
+    # class_weights = torch.FloatTensor(class_weights).to(device)
+    # Loss and optimizer
+    criterion = nn.CrossEntropyLoss(normedWeights)
+    # optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # Train Network
+    losses = np.zeros((1,num_epochs)).flatten()
+    
+    for epoch in range(num_epochs):
+        for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
             
+            # Get data to cuda if possible
+            data = data.to(device=device)
+            targets = targets.to(device=device)
+    
+            # forward
+            scores = model(data)
+            
+            loss = criterion(scores, targets)
+            losses[epoch] = loss.item()
+            
+            # backward
+            optimizer.zero_grad()
+            loss.backward()
+    
+            # gradient descent or adam step
+            optimizer.step()
+                
+    state = {"model_state": model.state_dict(), "optim_state": optimizer.state_dict()}
+    save_model_at_checkpoint(state, epoch)
+    
+else:
+    model, optimizer = load_model("model_at_epoch_" + str(20+num_epochs-1) + ".pth.tar")
 # ============================================================================= # 
 
-training_accuracies = check_accuracy(train_loader, model)
-testing_accuracies = check_accuracy(test_loader, model)
+training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
+testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
 
-print(f"Accuracy on training set " + str(training_accuracies.mean()))
-print(f"Accuracy on test set " + str(testing_accuracies.mean()))
+print("\n")
+for i in range(1, len(training_accuracies)):
+    print("training accuracy for class " + str(i) + " is:")
+    print(training_accuracies[i].mean())
+    print("test accuracy for class " + str(i) + " is:")
+    print(testing_accuracies[i].mean())
+    
