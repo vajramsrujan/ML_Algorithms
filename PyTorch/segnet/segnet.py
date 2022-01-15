@@ -128,7 +128,7 @@ def load_model(filename):
     model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
-    checkpoint = torch.load(filename)
+    checkpoint = torch.load(filename, map_location=torch.device('cpu'))
     model.load_state_dict(checkpoint['model_state'])
     optimizer.load_state_dict(checkpoint['optim_state'])
     
@@ -218,11 +218,11 @@ learning_rate = 0.01
 batch_size = 16
 num_epochs = 20
 num_classes = 3
-LOAD_MODEL = False
+LOAD_MODEL = True
 
 
 # Load custom dataset
-dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\segnet\archive', 
+dataset = SegNetDataSet('/Users/srujanvajram/Documents/Github/ML_playground/ML_playground/PyTorch/segnet/archive', 
                         data_transforms=data_transforms, target_transforms=target_transforms)
 
 # Produce test and train sets
@@ -293,4 +293,6 @@ for i in range(1, len(training_accuracies)):
     print(training_accuracies[i].mean())
     print("test accuracy for class " + str(i) + " is:")
     print(testing_accuracies[i].mean())
+
+
     
