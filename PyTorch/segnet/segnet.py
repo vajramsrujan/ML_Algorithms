@@ -118,8 +118,6 @@ class SegNet(nn.Module):
         x = F.relu( self.decoder_bn5( self.decoder_conv5(x) ) )
         x = F.relu( self.decoder_bn6( self.decoder_conv6(x) ) )
         
-        # x = torch.squeeze(x)
-        
         return x
 # ============================================================================= # 
 
@@ -181,7 +179,6 @@ def check_accuracy(loader, model, num_classes):
                     
                     class_accuracies[n].append(accuracy*100)
           
-    
     model.train()
     return np.array(class_accuracies), predictions
 
@@ -216,13 +213,13 @@ target_transforms = transforms.Compose([
 in_channels = 3
 learning_rate = 0.01
 batch_size = 16
-num_epochs = 20
+num_epochs = 150
 num_classes = 3
-LOAD_MODEL = True
+LOAD_MODEL = False
 
 
 # Load custom dataset
-dataset = SegNetDataSet('/Users/srujanvajram/Documents/Github/ML_playground/ML_playground/PyTorch/segnet/archive', 
+dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\segnet\archive', 
                         data_transforms=data_transforms, target_transforms=target_transforms)
 
 # Produce test and train sets
@@ -242,8 +239,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
 if not LOAD_MODEL: 
     # Initialize network
-    # model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
-    model, optimizer = load_model("model_at_epoch_" + str(num_epochs-1) + ".pth.tar")
+    model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
+    # model, optimizer = load_model("model_at_epoch_" + str(num_epochs-1) + ".pth.tar")
     
     # Compute the weighting for each class used in the loss
     normedWeights = [0.1664200524791033, 0.8427401371639913, 0.9908398103569054]
@@ -252,10 +249,12 @@ if not LOAD_MODEL:
     # class_weights = torch.FloatTensor(class_weights).to(device)
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss(normedWeights)
-    # optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Train Network
     losses = np.zeros((1,num_epochs)).flatten()
+    avg_training_acc = np.zeros((2,num_epochs))
+    avg_testing_acc = np.zeros((2,num_epochs))
     
     for epoch in range(num_epochs):
         for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
@@ -276,7 +275,16 @@ if not LOAD_MODEL:
     
             # gradient descent or adam step
             optimizer.step()
-                
+            
+        training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
+        testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
+        
+        avg_training_acc[0][epoch] = training_accuracies[1].mean()
+        avg_training_acc[1][epoch] = training_accuracies[2].mean()
+        
+        avg_testing_acc[0][epoch] = testing_accuracies[1].mean()
+        avg_testing_acc[1][epoch] = testing_accuracies[2].mean()
+        
     state = {"model_state": model.state_dict(), "optim_state": optimizer.state_dict()}
     save_model_at_checkpoint(state, epoch)
     
@@ -284,15 +292,12 @@ else:
     model, optimizer = load_model("model_at_epoch_" + str(20+num_epochs-1) + ".pth.tar")
 # ============================================================================= # 
 
-training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
-testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
+# training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
+# testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
 
-print("\n")
-for i in range(1, len(training_accuracies)):
-    print("training accuracy for class " + str(i) + " is:")
-    print(training_accuracies[i].mean())
-    print("test accuracy for class " + str(i) + " is:")
-    print(testing_accuracies[i].mean())
-
-
-    
+# print("\n")
+# for i in range(1, len(training_accuracies)):
+#     print("training accuracy for class " + str(i) + " is:")
+#     print(training_accuracies[i].mean())
+#     print("test accuracy for class " + str(i) + " is:")
+#     print(testing_accuracies[i].mean()) 
