@@ -86,7 +86,6 @@ class SegNet(nn.Module):
         # -------------------------# 
         # Prediction layer
         
-
     def forward(self, x):
         # Encoder block 1 pass
         x = F.relu( self.encoder_bn1( self.encoder_conv1(x) ) )
@@ -217,7 +216,6 @@ num_epochs = 150
 num_classes = 3
 LOAD_MODEL = False
 
-
 # Load custom dataset
 dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\segnet\archive', 
                         data_transforms=data_transforms, target_transforms=target_transforms)
@@ -290,6 +288,7 @@ if not LOAD_MODEL:
     
 else:
     model, optimizer = load_model("model_at_epoch_" + str(20+num_epochs-1) + ".pth.tar")
+    
 # ============================================================================= # 
 
 # training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
