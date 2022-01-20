@@ -133,7 +133,7 @@ def load_model(filename):
 # ============================================================================= # 
 
 def save_model_at_checkpoint(state, epoch):
-    filename = "model_at_epoch_" + str(epoch) + ".pth.tar"
+    filename = "model_at_epoch_" + str(epoch+1) + ".pth.tar"
     torch.save(state, filename)
     
 # ============================================================================= # 
@@ -212,9 +212,9 @@ target_transforms = transforms.Compose([
 in_channels = 3
 learning_rate = 0.01
 batch_size = 16
-num_epochs = 150
+num_epochs = 35
 num_classes = 3
-LOAD_MODEL = False
+LOAD_MODEL = True
 
 # Load custom dataset
 dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\segnet\archive', 
@@ -222,12 +222,6 @@ dataset = SegNetDataSet(r'C:\Users\vajra\Documents\GitHub\ML_playground\PyTorch\
 
 # Produce test and train sets
 train_set, test_set = torch.utils.data.random_split(dataset, [329, 37]) # 90% 10% split between train and test 
-
-# # Compute mean and std of test data
-# train_loader = DataLoader(dataset=train_set, batch_size=len(train_set))
-# data, targets = next(iter(train_loader))
-# means = data[:, 0, :, :].mean(), data[:, 1, :, :].mean(), data[:, 2, :, :].mean()
-# stds = data[:, 0, :, :].std(), data[:, 1, :, :].std(), data[:, 2, :, :].std()
 
 train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)
@@ -238,15 +232,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if not LOAD_MODEL: 
     # Initialize network
     model = SegNet(in_channels=in_channels, num_classes=num_classes).to(device)
-    # model, optimizer = load_model("model_at_epoch_" + str(num_epochs-1) + ".pth.tar")
     
     # Compute the weighting for each class used in the loss
-    normedWeights = [0.1664200524791033, 0.8427401371639913, 0.9908398103569054]
-    normedWeights = torch.FloatTensor(normedWeights).to(device)
-    # class_weights = [0.0102774, 0.0544769, 0.935246]
-    # class_weights = torch.FloatTensor(class_weights).to(device)
+    normalized_weights = [0.1664200524791033, 0.8427401371639913, 0.9908398103569054]
+    normalized_weights = torch.FloatTensor(normalized_weights).to(device)
+
     # Loss and optimizer
-    criterion = nn.CrossEntropyLoss(normedWeights)
+    criterion = nn.CrossEntropyLoss(normalized_weights)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Train Network
@@ -274,29 +266,30 @@ if not LOAD_MODEL:
             # gradient descent or adam step
             optimizer.step()
             
-        training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
-        testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
+        # training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
+        # testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
         
-        avg_training_acc[0][epoch] = training_accuracies[1].mean()
-        avg_training_acc[1][epoch] = training_accuracies[2].mean()
+        # avg_training_acc[0][epoch] = training_accuracies[1].mean()
+        # avg_training_acc[1][epoch] = training_accuracies[2].mean()
         
-        avg_testing_acc[0][epoch] = testing_accuracies[1].mean()
-        avg_testing_acc[1][epoch] = testing_accuracies[2].mean()
+        # avg_testing_acc[0][epoch] = testing_accuracies[1].mean()
+        # avg_testing_acc[1][epoch] = testing_accuracies[2].mean()
         
     state = {"model_state": model.state_dict(), "optim_state": optimizer.state_dict()}
     save_model_at_checkpoint(state, epoch)
     
 else:
-    model, optimizer = load_model("model_at_epoch_" + str(20+num_epochs-1) + ".pth.tar")
+    model, optimizer = load_model("model_at_epoch_" + str(num_epochs) + ".pth.tar")
     
 # ============================================================================= # 
 
-# training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
-# testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
+training_accuracies, training_predictions = check_accuracy(train_loader, model, num_classes)
+testing_accuracies, test_predictions  = check_accuracy(test_loader, model, num_classes)
 
-# print("\n")
-# for i in range(1, len(training_accuracies)):
-#     print("training accuracy for class " + str(i) + " is:")
-#     print(training_accuracies[i].mean())
-#     print("test accuracy for class " + str(i) + " is:")
-#     print(testing_accuracies[i].mean()) 
+print("\n")
+for i in range(1, len(training_accuracies)):
+    print("training accuracy for class " + str(i) + " is:")
+    print(training_accuracies[i].mean())
+    print("test accuracy for class " + str(i) + " is:")
+    print(testing_accuracies[i].mean()) 
+    
