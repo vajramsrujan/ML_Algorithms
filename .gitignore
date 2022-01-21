@@ -128,3 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 decision_trees/ensemble_methods/.DS_Store
+.DS_Store
+decision_trees/.DS_Store
